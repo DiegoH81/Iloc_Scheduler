@@ -1,5 +1,5 @@
 #ifndef INSTRUCTION_H
-#endif INSTRUCTION_H
+#define INSTRUCTION_H
 
 #include <string>
 #include <vector>
@@ -15,7 +15,7 @@ enum Types
     lshift,
     rshift,
     nop
-}
+};
 
 int get_latency(Types in_type)
 {
@@ -33,7 +33,7 @@ int get_latency(Types in_type)
         case Types::loadAI:
         case Types::storeAI:
             return 3;
-        case default:
+        default:
             return -1;
     }
 }
@@ -41,13 +41,14 @@ int get_latency(Types in_type)
 class Instruction
 {
 public:
-    Instruction(const std::vector<std::string>& in_data,
+    Instruction(const std::vector<std::string>& in_source, const std::vector<std::string>& in_dest,
                 const Types in_type, const int& in_start):
-                data(in_data), start(in_start), duration(get_latency(in_type))
+                source(in_source), dest(in_dest),
+                start(in_start), duration(get_latency(in_type))
     {}
 
 private:
-    std::vector<std::string> data;
+    std::vector<std::string> source, dest;
     int start, duration;
 };
 
