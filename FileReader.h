@@ -2,6 +2,7 @@
 #define FILE_READER_H
 
 #include <string>
+#include <sstream>
 #include <filesystem>
 #include <fstream>
 
@@ -33,15 +34,6 @@ public:
         }
 
         return output;
-    }
-
-    void replace(std::string& in_str, char in_char, char to_replace = ' ')
-    {
-        for (auto &c : in_str)
-        {
-            if (c == in_char)
-                c = to_replace;
-        }
     }
     
 private:
