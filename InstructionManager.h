@@ -5,7 +5,7 @@
 #include <vector>
 #include <filesystem>
 #include <algorithm>
-
+#include <unordered_map>
 
 #include "Instruction.h"
 #include "FileReader.h"
@@ -35,9 +35,10 @@ private:
 class InstructionManager
 {
 public:
-	InstructionManager(std::filesystem::path in_path, int in_units):
+	InstructionManager(std::filesystem::path in_path, int in_units, bool in_rename = false):
 		reader(in_path), units(in_units), instructions(), graph(),
-		priority(), sorted_instructions()
+		priority(), sorted_instructions(), next_register(1),
+		rename(in_rename)
 	{}
 
 	void load_iloc(const std::string& in_data)
@@ -68,6 +69,9 @@ public:
 				else
 					dest.push_back(tokens[i]);
 			}
+
+			if (rename)
+				rename_registers(tokens[0], source, dest);
 			
 			instructions.push_back(Instruction(tokens[0], source, dest, -1));
 		}
@@ -215,10 +219,44 @@ public:
 private:
 	Graph graph;
 	FileReader reader;
-	int units;
+	int units, next_register;
+	bool rename;
 	std::vector<Instruction> instructions;
 	std::vector<int> priority;
 	std::vector<std::vector<int>> sorted_instructions;
+	std::unordered_map<std::string, std::string> current_name;
+
+	std::string get_name(const std::string& in_register)
+	{
+		if (!is_register(in_register) || !current_name.count(in_register))
+			return in_register;
+
+		return current_name[in_register];
+	}
+
+	void rename_registers(const std::string& op_code,
+						  std::vector<std::string>& source,
+						  std::vector<std::string>& dest)
+	{
+		for (auto& s : source)
+			s = get_name(s);
+
+		if (op_code == "storeAI")
+		{
+			dest[0] = get_name(dest[0]);
+			return;
+		}
+
+		for (auto& d : dest)
+		{
+			if (d == "r0")
+				continue;
+
+			std::string new_name = "r" + std::to_string(next_register++);
+			current_name[d] = new_name;
+			d = new_name;
+		}
+	}
 };
 
 #endif
