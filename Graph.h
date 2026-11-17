@@ -17,7 +17,8 @@ public:
 
 	Graph(int in_size) :
 		predecessors(in_size, std::vector<Data>()),
-		successors(in_size, std::vector<Data>())
+		successors(in_size, std::vector<Data>()),
+		size(in_size)
 	{}
 
 	void set_size(int in_size)
@@ -31,6 +32,18 @@ public:
 		successors[in_source].push_back({ in_dest, in_delay });
 		predecessors[in_dest].push_back({ in_source, in_delay });
 	}
+
+	void clear()
+	{
+		if (size > 0)
+		{
+			successors.clear();
+			predecessors.clear();
+			set_size(size);
+		}
+	}
+private:
+	int size;
 };
 
 

@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <algorithm>
 #include <unordered_map>
+#include <random>
+#include <limits>
 
 #include "Instruction.h"
 #include "FileReader.h"
@@ -21,7 +23,7 @@ public:
 
 	bool operator()(int a, int b)
 	{
-		if (priority[a] != priority[b])
+		if ((priority[a] != priority[b]))
 			return priority[a] > priority[b];
 
 		return a < b;
@@ -29,20 +31,164 @@ public:
 
 private:
 	const std::vector<int>& priority;
+	bool only_prio;
 };
 
 
 class InstructionManager
 {
 public:
-	InstructionManager(std::filesystem::path in_path, int in_units, bool in_rename = false):
+	InstructionManager(std::filesystem::path in_path, int in_units, bool in_rename = false, bool in_random_ties = false):
 		reader(in_path), units(in_units), instructions(), graph(),
 		priority(), sorted_instructions(), next_register(1000),
-		rename(in_rename)
+		rename(in_rename), random_ties(in_random_ties),
+		rng( std::random_device{}() )
 	{}
 
+	void schedule_normal(const std::string& in_data)
+	{
+		load_iloc(in_data);
+		build_graph();
+		compute_priority();
+		schedule();
+	}
+
+	void schedule_backwards(const std::string& in_data)
+	{
+		load_iloc(in_data);
+		build_graph();
+		compute_priority_backward();
+		schedule_backward();
+	}
+
+	void rbf(const std::string& in_data, int repetitions = 5)
+	{
+		random_ties = true;
+		int min_length = std::numeric_limits<int>::max();
+
+		std::vector<std::vector<int>> best_sorted;
+		std::vector<int> best_start;
+
+		for (int i = 0; i < (repetitions * 2); i++)
+		{
+			if (i % 2 == 0)
+				schedule_normal(in_data);
+			else
+				schedule_backwards(in_data);
+
+			int new_length = get_length();
+			if (new_length < min_length)
+			{
+				min_length = new_length;
+				best_sorted = sorted_instructions;
+
+				best_start.clear();
+				for (auto& ins : instructions)
+					best_start.push_back(ins.start);
+			}
+		}
+
+		sorted_instructions = best_sorted;
+		for (int i = 0; i < instructions.size(); i++)
+			instructions[i].start = best_start[i];
+	}
+
+
+	void print()
+	{
+		for (int i = 0; i < sorted_instructions.size(); i++)
+		{
+			std::cout << i + 1 << " :\t";
+			if (sorted_instructions[i].empty())
+				std::cout << "nop";
+			else
+			{
+				for (int j = 0; j < sorted_instructions[i].size(); j++)
+				{
+					if (j > 0)
+						std::cout << "; ";
+
+					int idx = sorted_instructions[i][j];
+
+					std::cout << instructions[idx];
+				}
+			}
+			std::cout << "\n";
+		}
+
+
+		std::cout << "length: " << get_length() << " cycles\n";
+	}
+
+private:
+	Graph graph;
+	FileReader reader;
+	std::mt19937 rng;
+	int units, next_register;
+	bool rename, random_ties;
+	std::vector<Instruction> instructions;
+	std::vector<int> priority;
+	std::vector<std::vector<int>> sorted_instructions;
+	std::unordered_map<std::string, std::string> current_name;
+
+	std::string get_name(const std::string& in_register)
+	{
+		if (!is_register(in_register) || !current_name.count(in_register))
+			return in_register;
+
+		return current_name[in_register];
+	}
+
+	void rename_registers(const std::string& op_code,
+						  std::vector<std::string>& source,
+						  std::vector<std::string>& dest)
+	{
+		for (auto& s : source)
+			s = get_name(s);
+
+		if (op_code == "storeAI")
+		{
+			dest[0] = get_name(dest[0]);
+			return;
+		}
+
+		for (auto& d : dest)
+		{
+			if (d == "r0")
+				continue;
+
+			std::string new_name = "r" + std::to_string(next_register++);
+			current_name[d] = new_name;
+			d = new_name;
+		}
+	}
+
+	void reset_instructions()
+	{
+		for (auto& i : instructions)
+			i.start = -1;
+
+		sorted_instructions.clear();
+	}
+
+	int get_length()
+	{
+		int to_return = 0;
+		for (auto& ins : instructions)
+			to_return = std::max(to_return, ins.start + ins.latency);
+
+		return to_return - 1;
+	}
+
+	// Algorithm methods
 	void load_iloc(const std::string& in_data)
 	{
+		if (!instructions.empty())
+		{
+			reset_instructions();
+			return;
+		}
+
 		auto lines = help::get_lines_from_string(in_data);
 
 		for (auto& l : lines)
@@ -72,7 +218,7 @@ public:
 
 			if (rename)
 				rename_registers(tokens[0], source, dest);
-			
+
 			instructions.push_back(Instruction(tokens[0], source, dest, -1));
 		}
 	}
@@ -183,8 +329,22 @@ public:
 					ready.push_back(i);
 			}
 
-			// Sort by priority
+			// Sort by priority			
 			std::sort(ready.begin(), ready.end(), ByPriority(priority));
+
+			if (random_ties)
+			{
+				int i = 0;
+				while (i < ready.size())
+				{
+					int j = i;
+					while (j < ready.size() && priority[ready[j]] == priority[ready[i]])
+						j++;
+
+					std::shuffle(ready.begin() + i, ready.begin() + j, rng);
+					i = j;
+				}
+			}
 
 			std::vector<int> temp;
 			for (int k = 0; k < ready.size() && k < units; k++)
@@ -236,6 +396,19 @@ public:
 
 			// Sort by priority
 			std::sort(ready.begin(), ready.end(), ByPriority(priority));
+			if (random_ties)
+			{
+				int i = 0;
+				while (i < ready.size())
+				{
+					int j = i;
+					while (j < ready.size() && priority[ready[j]] == priority[ready[i]])
+						j++;
+
+					std::shuffle(ready.begin() + i, ready.begin() + j, rng);
+					i = j;
+				}
+			}
 
 			std::vector<int> temp;
 			for (int k = 0; k < ready.size() && k < units; k++)
@@ -261,78 +434,6 @@ public:
 			sorted_instructions.pop_back();
 	}
 
-
-
-	void print()
-	{
-		for (int i = 0; i < sorted_instructions.size(); i++)
-		{
-			std::cout << i + 1 << " :\t";
-			if (sorted_instructions[i].empty())
-				std::cout << "nop";
-			else
-			{
-				for (int j = 0; j < sorted_instructions[i].size(); j++)
-				{
-					if (j > 0)
-						std::cout << "; ";
-
-					int idx = sorted_instructions[i][j];
-
-					std::cout << instructions[idx];
-				}
-			}
-			std::cout << "\n";
-		}
-
-		int length = 0;
-		for (auto& ins : instructions)
-			length = std::max(length, ins.start + ins.latency);
-
-		std::cout << "length: " << length - 1 << " cycles\n";
-	}
-
-private:
-	Graph graph;
-	FileReader reader;
-	int units, next_register;
-	bool rename;
-	std::vector<Instruction> instructions;
-	std::vector<int> priority;
-	std::vector<std::vector<int>> sorted_instructions;
-	std::unordered_map<std::string, std::string> current_name;
-
-	std::string get_name(const std::string& in_register)
-	{
-		if (!is_register(in_register) || !current_name.count(in_register))
-			return in_register;
-
-		return current_name[in_register];
-	}
-
-	void rename_registers(const std::string& op_code,
-						  std::vector<std::string>& source,
-						  std::vector<std::string>& dest)
-	{
-		for (auto& s : source)
-			s = get_name(s);
-
-		if (op_code == "storeAI")
-		{
-			dest[0] = get_name(dest[0]);
-			return;
-		}
-
-		for (auto& d : dest)
-		{
-			if (d == "r0")
-				continue;
-
-			std::string new_name = "r" + std::to_string(next_register++);
-			current_name[d] = new_name;
-			d = new_name;
-		}
-	}
 };
 
 #endif
