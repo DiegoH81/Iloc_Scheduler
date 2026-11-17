@@ -1,19 +1,43 @@
-// Iloc_Scheduler.cpp : Este archivo contiene la función "main". La ejecución del programa comienza y termina ahí.
-//
-
 #include <iostream>
+#include <sstream>
+#include <string>
+#include "InstructionManager.h"
 
-int main()
+int main(int argc, char* argv[])
 {
-    std::cout << "Hello World!\n";
+    if (argc < 2)
+    {
+        std::cerr << "Use: ./sched < # units > < Iloc code > \n";
+        return 1;
+    }
+
+    int units = std::stoi(argv[1]);
+    bool rename = false, backward = false, use_rbf = false, random_ties = false;
+
+    for (int i = 2; i < argc; i++)
+    {
+        std::string arg = argv[i];
+        if (arg == "-r")
+            rename = true;
+        if (arg == "-b")
+            backward = true;
+        if (arg == "-rbf")
+            use_rbf = true;
+        if (arg == "-rand")
+            random_ties = true;
+    }
+
+    std::stringstream buffer;
+    buffer << std::cin.rdbuf();
+
+    InstructionManager manager(".", units, rename, random_ties);
+
+    if (use_rbf)
+        manager.rbf(buffer.str());
+    else if (backward)
+        manager.schedule_backwards(buffer.str());
+    else
+        manager.schedule_normal(buffer.str());
+
+    manager.print();
 }
-
-// Ejecutar programa: Ctrl + F5 o menú Depurar > Iniciar sin depurar
-// Depurar programa: F5 o menú Depurar > Iniciar depuración
-
-// Sugerencias para primeros pasos: 1. Use la ventana del Explorador de soluciones para agregar y administrar archivos
-//   2. Use la ventana de Team Explorer para conectar con el control de código fuente
-//   3. Use la ventana de salida para ver la salida de compilación y otros mensajes
-//   4. Use la ventana Lista de errores para ver los errores
-//   5. Vaya a Proyecto > Agregar nuevo elemento para crear nuevos archivos de código, o a Proyecto > Agregar elemento existente para agregar archivos de código existentes al proyecto
-//   6. En el futuro, para volver a abrir este proyecto, vaya a Archivo > Abrir > Proyecto y seleccione el archivo .sln
