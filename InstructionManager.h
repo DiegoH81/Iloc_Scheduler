@@ -37,7 +37,7 @@ class InstructionManager
 public:
 	InstructionManager(std::filesystem::path in_path, int in_units, bool in_rename = false):
 		reader(in_path), units(in_units), instructions(), graph(),
-		priority(), sorted_instructions(), next_register(1),
+		priority(), sorted_instructions(), next_register(1000),
 		rename(in_rename)
 	{}
 
@@ -138,6 +138,21 @@ public:
 		}
 	}
 
+	void compute_priority_backward()
+	{
+		int n = instructions.size();
+		priority.assign(n, 0);
+
+		for (int i = 0; i < n; i++)
+		{
+			int best = 0;
+			for (auto& p : graph.predecessors[i])
+				best = std::max(best, priority[p.first]);
+
+			priority[i] = instructions[i].latency + best;
+		}
+	}
+
 	void schedule()
 	{
 		int cycle = 1;
@@ -184,8 +199,69 @@ public:
 			sorted_instructions.push_back(temp);
 			cycle++;
 		}
-
 	}
+
+	void schedule_backward()
+	{
+		int cycle = 1;
+		int counter = 0;
+		int n = instructions.size();
+
+		while (counter < n)
+		{
+			std::vector<int> ready;
+
+			for (int i = 0; i < n; i++)
+			{
+				if (instructions[i].start != -1) // Already scheduled
+					continue;
+
+				if (instructions[i].latency > cycle)
+					continue;
+
+				bool condition_met = true;
+				for (auto& s : graph.successors[i])
+				{
+					int s_start = instructions[s.first].start;
+					if ((s_start == -1) || (s_start + s.second > cycle))
+					{
+						condition_met = false;
+						break;
+					}
+				}
+
+				if (condition_met)
+					ready.push_back(i);
+			}
+
+			// Sort by priority
+			std::sort(ready.begin(), ready.end(), ByPriority(priority));
+
+			std::vector<int> temp;
+			for (int k = 0; k < ready.size() && k < units; k++)
+			{
+				int r = ready[k];
+
+				instructions[r].start = cycle;
+				temp.push_back(r);
+				counter++;
+			}
+
+			sorted_instructions.push_back(temp);
+			cycle++;
+		}
+
+		int total = sorted_instructions.size();
+		for (auto& ins : instructions)
+			ins.start = total - ins.start + 1;
+
+		std::reverse(sorted_instructions.begin(), sorted_instructions.end());
+
+		while (!sorted_instructions.empty() && sorted_instructions.back().empty())
+			sorted_instructions.pop_back();
+	}
+
+
 
 	void print()
 	{
