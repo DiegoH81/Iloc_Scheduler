@@ -1,0 +1,6 @@
+loadAI r0,@c => r2
+storeAI r3 => r0,@a
+add r1,r3 => r4
+loadAI r0,@a => r4
+mult r2,r3 => r1
+loadI 3 => r3
