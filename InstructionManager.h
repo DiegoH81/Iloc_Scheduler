@@ -96,10 +96,12 @@ public:
 
 	void print()
 	{
-		for (int i = 0; i < sorted_instructions.size(); i++)
+        int length = get_length();
+
+		for (int i = 0; i < length; i++)
 		{
 			std::cout << i + 1 << " :\t";
-			if (sorted_instructions[i].empty())
+			if ((i >= sorted_instructions.size()) || sorted_instructions[i].empty())
 				std::cout << "nop";
 			else
 			{
@@ -117,7 +119,7 @@ public:
 		}
 
 
-		std::cout << "length: " << get_length() << " cycles\n";
+		std::cout << "length: " << length << " cycles\n";
 	}
 
 private:
