@@ -1,0 +1,2 @@
+loadI 5 => r1
+loadAI r0,@a => r2
