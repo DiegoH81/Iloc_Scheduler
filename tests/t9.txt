@@ -1,0 +1,4 @@
+loadAI r0,@a => r3
+lshift r2,r2 => r1
+storeAI r4 => r0,@c
+lshift r1,r3 => r4
